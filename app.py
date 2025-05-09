@@ -232,7 +232,7 @@ def main():
             "Siapa mahasiswa paling muda?",
             "Berapa banyak mahasiswa dari Surabaya?",
             "Siapa yang tanggal ulang tahunnya bareng?",
-            "Siapa yang asalnya dari luar pulau Jawa?"
+            "Siapa yang asalnya dari luar pulau Jawa?",
             "Siapa yang rumahnya paling jauh dari kampus?",
         ]
         for i, suggestion in enumerate(suggestions):
