@@ -3,6 +3,7 @@ import google.generativeai as genai
 import json
 from datetime import datetime
 from cryptography.fernet import Fernet
+from collections import defaultdict
 
 api_key = st.secrets["GOOGLE_API_KEY"]
 genai.configure(api_key=api_key)
@@ -114,6 +115,17 @@ def detect_city(student):
 
     return predict_city_with_llm(alamat)
 
+def group_birthdays_by_day_month(data_list):
+    grouped = defaultdict(list)
+    for student in data_list:
+        try:
+            tgl_lahir = datetime.strptime(student['Tanggal Lahir'], "%d %B %Y")
+            key = tgl_lahir.strftime("%d-%m")
+            grouped[key].append(student['Nama'])
+        except:
+            continue
+    return {k: v for k, v in grouped.items() if len(v) > 1}
+
 def predict_city_with_llm(address):
     if not address:
         return None
@@ -123,7 +135,7 @@ def predict_city_with_llm(address):
 
 def get_answer(prompt, parsed_data, statistics):
     today_date = datetime.now().strftime("%d %B %Y")
-    today_day_month = datetime.now().strftime("%d %B")
+    same_birthdays = group_birthdays_by_day_month(parsed_data)
 
     conversation_history = ""
     if "messages" in st.session_state:
@@ -154,6 +166,9 @@ Kamu adalah chatbot yang dibuat oleh Rifqi Raehan Hermawan untuk membantu menjaw
 - Mahasiswa di Kelas B: {statistics['pararel_B']}
 - Mahasiswa termuda: {statistics['youngest']['Nama'] if statistics['youngest'] else 'Tidak tersedia'} ({statistics['youngest']['Umur'] if statistics['youngest'] else '-'})
 - Mahasiswa tertua: {statistics['oldest']['Nama'] if statistics['oldest'] else 'Tidak tersedia'} ({statistics['oldest']['Umur'] if statistics['oldest'] else '-'})
+
+**Data Mahasiswa dengan Tanggal Lahir yang Sama (Tanpa Tahun)**:
+{json.dumps(same_birthdays, indent=2, ensure_ascii=False)}
 
 **Pertanyaan Pengguna**:
 {prompt}
@@ -213,12 +228,12 @@ def main():
         st.markdown("💡 **Contoh pertanyaan:**")
         cols = st.columns(3)
         suggestions = [
-            "Berapa banyak perempuan di kelas A?",
-            "Siapa mahasiswa paling muda?",
             "Siapa aja yang ulang tahun di bulan ini?",
+            "Siapa mahasiswa paling muda?",
             "Berapa banyak mahasiswa dari Surabaya?",
-            "Siapa yang rumahnya paling jauh dari kampus?",
+            "Siapa yang tanggal ulang tahunnya bareng?",
             "Siapa yang asalnya dari luar pulau Jawa?"
+            "Siapa yang rumahnya paling jauh dari kampus?",
         ]
         for i, suggestion in enumerate(suggestions):
             with cols[i % 3]:
