@@ -7,7 +7,7 @@ from collections import defaultdict
 
 api_key = st.secrets["GOOGLE_API_KEY"]
 genai.configure(api_key=api_key)
-model = genai.GenerativeModel('gemini-2.0-flash')
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 fernet_key = st.secrets["encryption"]["key"]
 fernet = Fernet(fernet_key.encode())
@@ -18,59 +18,52 @@ def load_student_data():
             encrypted_data = f.read()
 
         decrypted_data = fernet.decrypt(encrypted_data)
-
-        json_data = json.loads(decrypted_data.decode('utf-8'))
-
-        return json_data
+        return json.loads(decrypted_data.decode('utf-8'))
 
     except FileNotFoundError:
         st.error("File data.encrypted tidak ditemukan.")
-        return []
-        return []
     except json.JSONDecodeError:
         st.error("Data terdekripsi bukan format JSON yang valid.")
-        return []
     except Exception as e:
         st.error(f"Terjadi kesalahan saat memuat data: {str(e)}")
-        return []
+    return []
+
+def parse_individual_student(data, today):
+    try:
+        tgl_lahir = datetime.strptime(data['tgllahir'], "%d-%m-%Y")
+        umur = today.year - tgl_lahir.year - ((today.month, today.day) < (tgl_lahir.month, tgl_lahir.day))
+        tgl_lahir_formatted = tgl_lahir.strftime("%d %B %Y")
+    except (ValueError, TypeError):
+        umur = None
+        tgl_lahir_formatted = "Tanggal tidak valid"
+
+    return {
+        "NRP": data.get("nrp", ""),
+        "Nama": data.get("nama", "").title(),
+        "Program Studi": data.get("program studi", "").title(),
+        "Semester": data.get("semester", ""),
+        "Pararel": data.get("pararel", "").upper(),
+        "Dosen Wali": data.get("dosen_wali", "").title(),
+        "Status": data.get("status", ""),
+        "Tanggal Lahir": tgl_lahir_formatted,
+        "Tempat Lahir": data.get("tmplahir", "").title(),
+        "Tanggal Masuk": data.get("tglmasuk", ""),
+        "Jenis Kelamin": data.get("jenis_kelamin", "").title(),
+        "Warga": data.get("warga", ""),
+        "Agama": data.get("agama", "").title(),
+        "Golongan Darah": data.get("golongan_darah", ""),
+        "Alamat": data.get("alamat", "").title(),
+        "No. Telp": data.get("notelp", ""),
+        "WhatsApp Link": f"https://wa.me/62{data['notelp'].lstrip('0')}" if data.get("notelp") else "",
+        "Asal Sekolah": data.get("asal_sekolah", "").title(),
+        "Tanggal Lulus": data.get("tgllulus", ""),
+        "Jalur Penerimaan": data.get("jalur_penerimaan", "").title(),
+        "Umur": umur
+    }
 
 def parse_student_data(data_list):
-    parsed_data = []
     today = datetime.now()
-
-    for data in data_list:
-        try:
-            tgl_lahir = datetime.strptime(data['tgllahir'], "%d-%m-%Y")
-            umur = today.year - tgl_lahir.year - ((today.month, today.day) < (tgl_lahir.month, tgl_lahir.day))
-            tgl_lahir_formatted = tgl_lahir.strftime("%d %B %Y")
-        except (ValueError, TypeError):
-            umur = None
-            tgl_lahir_formatted = "Tanggal tidak valid"
-
-        parsed_student = {
-            "NRP": data.get("nrp", ""),
-            "Nama": data.get("nama", "").title(),
-            "Program Studi": data.get("program studi", "").title(),
-            "Semester": data.get("semester", ""),
-            "Pararel": data.get("pararel", "").upper(),
-            "Dosen Wali": data.get("dosen_wali", "").title(),
-            "Status": data.get("status", ""),
-            "Tanggal Lahir": tgl_lahir_formatted,
-            "Tempat Lahir": data.get("tmplahir", "").title(),
-            "Tanggal Masuk": data.get("tglmasuk", ""),
-            "Jenis Kelamin": data.get("jenis_kelamin", "").title(),
-            "Warga": data.get("warga", ""),
-            "Agama": data.get("agama", "").title(),
-            "Golongan Darah": data.get("golongan_darah", ""),
-            "Alamat": data.get("alamat", "").title(),
-            "No. Telp": data.get("notelp", ""),
-            "WhatsApp Link": f"https://wa.me/62{data['notelp'].lstrip('0')}" if data.get("notelp") else "",
-            "Asal Sekolah": data.get("asal_sekolah", "").title(),
-            "Tanggal Lulus": data.get("tgllulus", ""),
-            "Jalur Penerimaan": data.get("jalur_penerimaan", "").title(),
-            "Umur": umur
-        }
-        parsed_data.append(parsed_student)
+    parsed_data = [parse_individual_student(data, today) for data in data_list]
 
     valid_students = [s for s in parsed_data if s['Umur'] is not None]
     sorted_students = sorted(valid_students, key=lambda x: x['Umur']) if valid_students else []
@@ -89,31 +82,23 @@ def parse_student_data(data_list):
         "youngest": sorted_students[0] if sorted_students else None
     }
 
-    # print("Statistics:", statistics)
-
     return parsed_data, statistics
 
 def detect_city(student):
-    alamat = student.get("Alamat", "").lower()
-    tmplahir = student.get("Tempat Lahir", "").lower()
+    search_areas = [student.get("Alamat", "").lower(), student.get("Tempat Lahir", "").lower()]
     keywords = ["kota", "kabupaten", "kab.", "kab", "kec.", "kec", "kel.", "kel"]
 
-    for keyword in keywords:
-        if keyword in alamat:
-            parts = alamat.split(keyword)
-            if len(parts) > 1:
-                kota = parts[1].strip().split(",")[0]
-                return kota.title()
-        if keyword in tmplahir:
-            parts = tmplahir.split(keyword)
-            if len(parts) > 1:
-                kota = parts[1].strip().split(",")[0]
-                return kota.title()
+    for area in search_areas:
+        for keyword in keywords:
+            if keyword in area:
+                parts = area.split(keyword)
+                if len(parts) > 1:
+                    return parts[1].strip().split(",")[0].title()
 
-    if tmplahir:
-        return tmplahir.title()
+    if student.get("Tempat Lahir"):
+        return student["Tempat Lahir"].title()
 
-    return predict_city_with_llm(alamat)
+    return predict_city_with_llm(student.get("Alamat", ""))
 
 def group_birthdays_by_day_month(data_list):
     grouped = defaultdict(list)
@@ -122,10 +107,11 @@ def group_birthdays_by_day_month(data_list):
             tgl_lahir = datetime.strptime(student['Tanggal Lahir'], "%d %B %Y")
             key = tgl_lahir.strftime("%d-%m")
             grouped[key].append(student['Nama'])
-        except:
+        except (ValueError, KeyError):
             continue
     return {k: v for k, v in grouped.items() if len(v) > 1}
 
+@st.cache_data
 def predict_city_with_llm(address):
     if not address:
         return None
